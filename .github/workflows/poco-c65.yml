@@ -1,0 +1,37 @@
+name: POCO C65 720p diagnostic APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Install Android tools
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865' 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.14206865" >> "$GITHUB_ENV"
+      - name: Apply POCO C65 diagnostic and 720p patch
+        run: |
+          git apply --check .github/patches/poco-c65-720p.patch
+          git apply .github/patches/poco-c65-720p.patch
+      - name: Build native libraries
+        run: bash build_mobile.sh
+      - name: Package APKs
+        run: |
+          export JAVA_HOME="${JAVA_HOME_17_X64:-$JAVA_HOME}"
+          bash package_mobile_apk.sh
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: GalaxyMobile-PocoC65-720p-Diagnostic
+          path: |
+            out-mobile/GalaxyMobile.apk
+            out-mobile/GalaxyMobilePlus.apk
+          if-no-files-found: error
