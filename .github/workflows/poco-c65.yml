@@ -36,6 +36,21 @@ jobs:
           else:
               print(f'Header already present: {target}')
           PYFIX
+      - name: Fix FileSelectItem header filename on Linux
+        run: |
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          folder = Path('decomp/include/Game/Map')
+          source = folder / 'FIleSelectItem.hpp'
+          target = folder / 'FileSelectItem.hpp'
+          if not target.is_file():
+              if not source.is_file():
+                  raise SystemExit(f'Missing both {source} and {target}')
+              target.write_bytes(source.read_bytes())
+              print(f'Created case-compatible header: {target}')
+          else:
+              print(f'Header already present: {target}')
+          PYFIX
       - name: Build native libraries
         run: bash build_mobile.sh
       - name: Package APKs
