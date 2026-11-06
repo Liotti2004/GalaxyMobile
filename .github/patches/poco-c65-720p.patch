@@ -1,0 +1,69 @@
+--- a/platform/mobile/mobile_app.cpp
++++ b/platform/mobile/mobile_app.cpp
+@@ -243,18 +243,10 @@
+ }
+ 
+ int getDesiredTargetHeight(const MobileApp& a) {
+-    if (!mobile_ui::UIOverlay::get().isPlusEdition()) {
+-        return (a.screenHeight > 1080) ? std::min(a.screenHeight, 1440) : 1080;
+-    }
+-    int preset = mobile_ui::UIOverlay::get().settings().graphicsPreset;
+-    switch (preset) {
+-        case 0: return 720;                                                   // Low: 720p HD
+-        case 1: return 900;                                                   // Medium: 900p HD+
+-        case 3: return std::max(1080, a.screenHeight);                        // Ultra: Native (QHD+/1440p+)
+-        case 2:                                                               // High: 1080p / 1440p
+-        default:
+-            return (a.screenHeight > 1080) ? std::min(a.screenHeight, 1440) : 1080;
+-    }
++    // POCO C65: fixed 720p internal render height for both editions.
++    // Width remains 1280 in 16:9 mode; fullscreen preserves native aspect ratio.
++    (void)a;
++    return 720;
+ }
+ 
+ void updateViewport(MobileApp& a);
+@@ -267,6 +259,11 @@
+     glBlitFramebuffer(0, 0, a.efbTarget.width, a.efbTarget.height,
+                       a.vpX, a.vpY, a.vpX + a.vpW, a.vpY + a.vpH,
+                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
++    GLenum blitError = glGetError();
++    if (blitError != GL_NO_ERROR) {
++        LOGE("MALI_DIAG present blit failed: 0x%x (src=%dx%d dst=%dx%d)",
++             (unsigned)blitError, a.efbTarget.width, a.efbTarget.height, a.vpW, a.vpH);
++    }
+ }
+ 
+ void updateViewport(MobileApp& a) {
+@@ -319,6 +316,18 @@
+     updateViewport(a);
+     LOGI("Viewport: x=%d, y=%d, w=%d, h=%d (fullscreen=%d)", a.vpX, a.vpY, a.vpW, a.vpH, mobile_ui::get().settings().fullscreen ? 1 : 0);
+ 
++    // POCO C65 diagnostic: prove the EGL window can present a simple color
++    // before the game renderer, its shaders, or offscreen targets are used.
++    glBindFramebuffer(GL_FRAMEBUFFER, 0);
++    glViewport(0, 0, a.screenWidth, a.screenHeight);
++    glDisable(GL_SCISSOR_TEST);
++    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
++    glClearColor(0.0f, 0.65f, 0.25f, 1.0f);
++    glClear(GL_COLOR_BUFFER_BIT);
++    GLenum diagnosticError = glGetError();
++    EGLBoolean diagnosticSwap = eglSwapBuffers(a.display, a.surface);
++    LOGI("MALI_DIAG startup green: GL error=0x%x swap=%d EGL error=0x%x", (unsigned)diagnosticError, (int)diagnosticSwap, (unsigned)eglGetError());
++
+     // Initialize renderer and render target
+     gpu::Renderer& r = gpu::renderer();
+     if (!r.init()) {
+@@ -340,7 +349,11 @@
+             r.destroyTarget(a.efbTarget);
+         }
+         a.efbTarget = r.createTarget(targetW, targetH);
+-        a.targetReady = true;
++        a.targetReady = (a.efbTarget.fbo != 0);
++        if (!a.targetReady) {
++            LOGE("MALI_DIAG offscreen framebuffer creation returned FBO 0 (%dx%d)", targetW, targetH);
++            return false;
++        }
+         LOGI("Created offscreen EfbTarget: %dx%d (fullscreen=%d)", targetW, targetH, mobile_ui::get().settings().fullscreen ? 1 : 0);
+     }
+ 
