@@ -21,6 +21,21 @@ jobs:
         run: |
           git apply --check .github/patches/poco-c65-720p.patch
           git apply .github/patches/poco-c65-720p.patch
+      - name: Fix JASDSP header filename on Linux
+        run: |
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          folder = Path('decomp/libs/JSystem/include/JSystem/JAudio2')
+          source = folder / 'JASDspInterface.hpp'
+          target = folder / 'JASDSPInterface.hpp'
+          if not target.exists():
+              if not source.is_file():
+                  raise SystemExit(f'Missing both {source} and {target}')
+              target.write_bytes(source.read_bytes())
+              print(f'Created case-compatible header: {target}')
+          else:
+              print(f'Header already present: {target}')
+          PYFIX
       - name: Build native libraries
         run: bash build_mobile.sh
       - name: Package APKs
